@@ -10,6 +10,11 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn import svm 
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.cross_validation import train_test_split  
+from sklearn.grid_search import GridSearchCV  
+
 
 def getHuangli(date_str):
     print date_str
@@ -126,115 +131,142 @@ target2016 = f2016['7']
 for x in range(1,8):
     targets[x] = pd.concat( [ history[x], f2016[str(x)] ], ignore_index = True)
 #features = df
-#lr = LogisticRegression()
-
-"""
-print 'LR predict precision:'
-lrs = [[],[],[],[],[],[],[],[]]
-for x in range(1,8):
-    lrs[x] = lr.fit(features, targets[x])
-    #lrs.append(lr.fit(features, targets[x]))
-    print lrs[x].score(features, targets[x])
-   
-
-print "RF precision:"
-forest = RandomForestClassifier(max_depth = 10, min_samples_split=2, n_estimators = 600, random_state = 1)
-fs = [[],[],[],[],[],[],[],[]]
-for x in range(1,8):
-    fs[x] = forest.fit(features, targets[x])
-    #lrs.append(lr.fit(features, targets[x]))
-    print fs[x].score(features, targets[x])
-"""
-"""
-#f2016.to_csv("f2016.txt", index=False, encoding='gb2312')
-forest = RandomForestClassifier(max_depth = 10, min_samples_split=2, n_estimators = 1000, random_state = 1)
-forest.fit(features, history[7])
-print "RF precision old:"
-print forest.score(features, history[7])
-print "RF precision 2016:"
-print forest.score(features2016, target2016)
-"""
-"""
-#下面加上2016年数据一块训练，并预测最后一期
-forest = RandomForestClassifier(max_depth = 10, min_samples_split=2, n_estimators = 1000, random_state = 1)
-newfeat = pd.concat([features,features2016.drop(range(119,121)) ])
-newtar = pd.concat( [ history[7], target2016.drop(range(119,121)) ])
-new_test_feat = features2016[119:121]
-new_test_tar = target2016[119:121]
-forest.fit(newfeat,newtar)
-print "predict with 2016 data:"
-print forest.score(new_test_feat, new_test_tar)
-print forest.predict(new_test_feat)
-print forest.predict_proba(new_test_feat)
-"""
-
-
-
-
-
-
-
-#下面加上2016年数据一块训练，并预测要买的号码
-fs = []
-fs.append('')
 newfeat = pd.concat([features,features2016 ],ignore_index = True)
+
+
+
+
+
+
+
+#下面尝试用grid_search自动调参
+X = newfeat
+y = targets[7]
+X_train, X_test, y_train, y_test = train_test_split( X, y, test_size=0.01, random_state=0)  
+
+tuned_parameters_rf = {'max_depth':[9,10,11,12,13,14], 'n_estimators':range(600,1800,100), 'random_state':[1,2]} 
+
+tuned_parameters_ab = {'n_estimators':range(100,1500,50)}
+
+rf = GridSearchCV(RandomForestClassifier(), tuned_parameters_rf)  
+rf.fit(X, y)
+print("RandomForest---Best parameters set found on development set:")  
+print()  
+print(rf.best_params_)  
+print()  
+print("Grid scores on development set:")  
+print()  
+for params, mean_score, scores in rf.grid_scores_:  
+    print("%0.3f (+/-%0.03f) for %r" % (mean_score, scores.std() * 2, params))  
+print()
+
+ab = GridSearchCV(AdaBoostClassifier(), tuned_parameters_ab)  
+ab.fit(X, y)
+print("AdaBoost---Best parameters set found on development set:")  
+print()  
+print(ab.best_params_)  
+print()  
+print("Grid scores on development set:")  
+print()  
+for params, mean_score, scores in ab.grid_scores_:  
+    print("%0.3f (+/-%0.03f) for %r" % (mean_score, scores.std() * 2, params))  
+print()
+
+
+
+
+
+
+
+
+
+
+
+
 """
-print newfeat.shape
-for i in range(1,8):
-    #print targets[i].shape
+#下面加上2016年数据一块训练，并预测要买的号码
+fs = [] #Random Forest
+fs.append('')
+lr = [] #Logistic Regression
+lr.append('')
+svms = [] #SVM
+svms.append('')
+ab = [] #Ada boost
+ab.append('')
+newfeat = pd.concat([features,features2016 ],ignore_index = True)
+
     
-    fs.append( RandomForestClassifier(max_depth = 10, min_samples_split=2, n_estimators = 1000, random_state = 1))
-    fs[i].fit(newfeat,targets[i])
+    
+
+#用最后十组 测试准确率
+ntargets = [[],[],[],[],[],[],[],[]]
+print 'shape: ',newfeat.shape
+newf = newfeat.drop(range(2009,2019))
+for i in range(1,8):
+    ntargets[i] = targets[i].drop(range(2009,2019))
+    #fs
+    fs.append( RandomForestClassifier(max_depth = 9, min_samples_split=2, n_estimators = 1300, random_state = 1))#自动化调参选出来的相对好的参数
+    fs[i].fit(newf,ntargets[i])
+    #lr
+    lr.append( LogisticRegression() )   
+    lr[i].fit(newf,ntargets[i])
+    #svm
+    svms.append( svm.SVC() )   
+    svms[i].fit(newf,ntargets[i])
+    #ada boost
+    ab.append( AdaBoostClassifier(n_estimators=1150) )#自动化调参选出来的相对好的参数
+    ab[i].fit(newf,ntargets[i])
+
+new_test_feat = newfeat[2009:2019]
+#print 'fea:'
+#print new_test_feat
+
+print 'random forest precision:'
+for i in range(1,8):
+    print fs[i].score(new_test_feat, targets[i][2009:2019])
+print 'LR precision:'
+for i in range(1,8):
+    print lr[i].score(new_test_feat, targets[i][2009:2019])
+print 'SVM precision:'
+for i in range(1,8):
+    print svms[i].score(new_test_feat, targets[i][2009:2019])
+print 'Ada boost precision:'
+for i in range(1,8):
+    print ab[i].score(new_test_feat, targets[i][2009:2019])
+    
 
 
-
-#预测号码
+#预测最新号码
+#先用当前全部数据训练模型
+newf = newfeat
+for i in range(1,8):
+    ntargets[i] = targets[i]
+    #fs
+    fs.append( RandomForestClassifier(max_depth = 12, min_samples_split=2, n_estimators = 1500, random_state = 1))
+    fs[i].fit(newf,ntargets[i])
+    #lr
+    lr.append( LogisticRegression() )   
+    lr[i].fit(newf,ntargets[i])
+    #svm
+    svms.append( svm.SVC() )   
+    svms[i].fit(newf,ntargets[i])
+    #ada boost
+    ab.append( AdaBoostClassifier(n_estimators=1000) )
+    ab[i].fit(newf,ntargets[i])
+#然后把最新一期的开奖日期的特征搞出来
 a = [{'date':'2016-10-16'}]
 pred_df = pd.DataFrame(a)
 print pred_df
 pred_df = prepare(fillWithHuangli(pred_df))
 pred_df = patt.merge(pred_df,how='outer').drop(0).fillna(0)
 print pred_df
-
 predict_feat = pred_df.fillna(0).drop(['date','1','2','3','4','5','6','7','y','m','d'], axis=1)
-
+#然后预测
+print 'Random Forest:'
 for i in range(1,8):
     print fs[i].predict(predict_feat)
-    
-    
-"""
-    
-    
-    
-   
-#用最后十组 测试准确率
-ntargets = [[],[],[],[],[],[],[],[]]
-print 'shape: ',newfeat.shape
-newf = newfeat.drop(range(2008,2019))
+print 'AdaBoost:'
 for i in range(1,8):
-    ntargets[i] = targets[i].drop(range(2008,2019))
-    fs.append( RandomForestClassifier(max_depth = 10, min_samples_split=2, n_estimators = 1000, random_state = 1))
-    fs[i].fit(newf,ntargets[i])
-
-new_test_feat = newfeat[2008:2019]
-print 'fea:'
-print new_test_feat
-
-for i in range(1,8):
-    print fs[i].score(new_test_feat, targets[i][2008:2019])
-
-
+    print ab[i].predict(predict_feat)
 """
-newtar[7] = pd.concat( [ history[7], target2016 ])
-new_test_feat = features2016[119:121]
-new_test_tar = target2016[119:121]
-forest.fit(newfeat,newtar)
-print "predict with 2016 data:"
-print forest.score(new_test_feat, new_test_tar)
-print forest.predict(new_test_feat)
-print forest.predict_proba(new_test_feat)
-"""
-#df2016 = get2016()
-#print df2016
-#test_features = df2016.drop(['y','m','d'], axis=1).values
-#fs[7].score()
+
